@@ -107,8 +107,6 @@ class PDFController extends Controller
                 'students' => $students
             ];
 
-            //dd($data);
-            ///return view('PDF.byClass', ['data' => $data]);
             $pdf = PDF::loadView('PDF.byClass', ['data' => $data])->setPaper('a3', 'landscape');
 
             return $pdf->download(ucfirst($data['class_room']) . '_' . $data['subject'] . '_' . $data['academic_year'] . '.pdf');
@@ -191,8 +189,8 @@ class PDFController extends Controller
 
             // convert number to word
             $in_words = "";
-            // $fmt = numfmt_create("ID", NumberFormatter::SPELLOUT);
-            // $in_words = numfmt_format($fmt, round($final_score, 0));
+            $fmt = numfmt_create("ID", NumberFormatter::SPELLOUT);
+            $in_words = numfmt_format($fmt, round($final_score, 0));
 
             $subjects[] = [
                 'subject' => $subject->name,
@@ -224,9 +222,7 @@ class PDFController extends Controller
     {
         $data = [];
         $students = [];
-        //$student_id = 6;
         $studentsList = Student::where('class_room_id', $class_id)->get();
-        // dd($students);
 
         foreach ($studentsList as $student) {
             $student_id = $student->id;
@@ -303,8 +299,8 @@ class PDFController extends Controller
 
                 // convert number to word
                 $in_words = "";
-                // $fmt = numfmt_create("ID", NumberFormatter::SPELLOUT);
-                // $in_words = numfmt_format($fmt, round($final_score, 0));
+                $fmt = numfmt_create("ID", NumberFormatter::SPELLOUT);
+                $in_words = numfmt_format($fmt, round($final_score, 0));
 
                 $subjects[] = [
                     'subject' => $subject->name,
@@ -326,9 +322,7 @@ class PDFController extends Controller
                 'score' => $subjects
             ];
         }
-        // dd($students);
 
-        //return view('PDF.byClassBulk', ['data' => $students, 'guardian' => Teacher::where('id', ClassRoom::find($class_id)->guardian_id)->first()->name]);
         $pdf = PDF::loadView('PDF.byClassBulk', ['data' => $students, 'guardian' => Teacher::where('id', ClassRoom::find($class_id)->guardian_id)->first()->name])->setPaper('a3', 'portrait');
 
         return $pdf->download('Nilai_Siswa_' . ucfirst($students[0]['class']) . '.pdf');
