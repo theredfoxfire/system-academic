@@ -108,10 +108,10 @@ class PDFController extends Controller
             ];
 
             //dd($data);
-            return view('PDF.byClass', ['data' => $data]);
-            // $pdf = PDF::loadView('PDF.byClass', ['data' => $data])->setPaper('a3', 'portrait');
+            ///return view('PDF.byClass', ['data' => $data]);
+            $pdf = PDF::loadView('PDF.byClass', ['data' => $data])->setPaper('a3', 'landscape');
 
-            // return $pdf->download($data['class_room'] . '_' . $data['subject'] . '_' . $data['academic_year'] . '.pdf');
+            return $pdf->download(ucfirst($data['class_room']) . '_' . $data['subject'] . '_' . $data['academic_year'] . '.pdf');
         } else {
             dd('The data is not available!');
         }
@@ -122,14 +122,19 @@ class PDFController extends Controller
         $data = ClassRoom::whereHas('students', function ($query) use ($student_id) {
             $query->where('student.id', $student_id);
         })->with([
+            'teachers',
             'students' => function ($query) use ($student_id) {
                 $query->where('student.id', $student_id);
+            },
+            'subjects.exams' => function ($query) {
+                $query->orderBy('exam.exam_type_id', 'DESC');
             },
             'subjects.exams.examType',
             'subjects.exams.examPoints' => function ($query) use ($student_id) {
                 $query->where('exam_point.student_id', $student_id);
             }
         ])->first();
+        $guardian = Teacher::where('id', $data->guardian_id)->first();
 
         $subjects = [];
         $data_nilai = [];
@@ -137,12 +142,14 @@ class PDFController extends Controller
         $final_score = 0;
         foreach ($data->subjects as $subject) {
             foreach ($subject->exams as $exam) {
-                foreach ($exam->examPoints as $examPoint) {
-                    $data_nilai[] = [
-                        'point' => $examPoint->point,
-                        'scale' => $exam->examType->scale,
-                        'type' => $exam->examType->name
-                    ];
+                if (!empty($exam->examPoints)) {
+                    foreach ($exam->examPoints as $examPoint) {
+                        $data_nilai[] = [
+                            'point' => $examPoint->point,
+                            'scale' => $exam->examType->scale,
+                            'type' => $exam->examType->name
+                        ];
+                    }
                 }
             }
 
@@ -191,7 +198,7 @@ class PDFController extends Controller
                 'subject' => $subject->name,
                 'final_score' => $final_score,
                 'in_words' => $in_words,
-                'description' => $final_score >= 75 ? "Tuntas" : "Tidak Tuntas"
+                'description' => round($final_score, 0) >= 75 ? "Tuntas" : "Tidak Tuntas"
             ];
 
             $final_score = 0;
@@ -207,6 +214,123 @@ class PDFController extends Controller
             'score' => $subjects
         ];
 
-        return view('PDF.byStudent', ['data' => $student]);
+        return view('PDF.byStudent', ['data' => $student, 'guardian' => $guardian->name, 'subject' => $student['score'][0]['subject']]);
+        $pdf = PDF::loadView('PDF.byStudent', ['data' => $student, 'guardian' => $guardian->name, 'subject' => $student['score'][0]['subject']])->setPaper('a3', 'portrait');
+
+        return $pdf->download($student['name'] . '_' . $student['score'][0]['subject'] . '_' . ucfirst($student['class']) . '.pdf');
+    }
+
+    function byClassBulk($class_id)
+    {
+        $data = [];
+        $students = [];
+        //$student_id = 6;
+        $studentsList = Student::where('class_room_id', $class_id)->get();
+        // dd($students);
+
+        foreach ($studentsList as $student) {
+            $student_id = $student->id;
+            $data[] = ClassRoom::whereHas('students', function ($query) use ($student_id) {
+                $query->where('student.id', $student_id);
+            })->with([
+                'teachers',
+                'students' => function ($query) use ($student_id) {
+                    $query->where('student.id', $student_id);
+                },
+                'subjects.exams' => function ($query) {
+                    $query->orderBy('exam.exam_type_id', 'DESC');
+                },
+                'subjects.exams.examType',
+                'subjects.exams.examPoints' => function ($query) use ($student_id) {
+                    $query->where('exam_point.student_id', $student_id);
+                }
+            ])->first();
+        }
+
+        foreach ($data as $singleData) {
+            $subjects = [];
+            $data_nilai = [];
+            $score_by_scale = [];
+            $final_score = 0;
+            foreach ($singleData->subjects as $subject) {
+                foreach ($subject->exams as $exam) {
+                    if (!empty($exam->examPoints)) {
+                        foreach ($exam->examPoints as $examPoint) {
+                            $data_nilai[] = [
+                                'point' => $examPoint->point,
+                                'scale' => $exam->examType->scale,
+                                'type' => $exam->examType->name
+                            ];
+                        }
+                    }
+                }
+
+                $count = 0;
+                foreach ($data_nilai as $key => $collect) {
+                    if (!empty($data_nilai[$key + 1])) {
+                        if (!empty($score_by_scale)) {
+                            if ($score_by_scale['type'] == $data_nilai[$key]['type']) {
+                                $score_by_scale['point'] += $collect['point'];
+                                $score_by_scale['count'] = ++$count;
+                            } else {
+                                $final_score += ((($score_by_scale['point']) / $count) * $data_nilai[$key - 1]['scale']) / 100;
+                                $count = 0;
+                                $score_by_scale = [
+                                    'type' => $collect['type'],
+                                    'point' => $collect['point'],
+                                    'count' => ++$count
+                                ];
+                            }
+                        } else {
+                            $score_by_scale = [
+                                'type' => $collect['type'],
+                                'point' => $collect['point'],
+                                'count' => ++$count
+                            ];
+                        }
+                    } else {
+                        if (!empty($score_by_scale)) {
+                            if ($score_by_scale['type'] == $data_nilai[$key]['type']) {
+                                $score_by_scale['point'] += $collect['point'];
+                                $score_by_scale['count'] = ++$count;
+                            } else {
+                                $final_score += ((($score_by_scale['point']) / $count) * $data_nilai[$key - 1]['scale']) / 100;
+                            }
+                        }
+                        $final_score += ($collect['point'] * $data_nilai[$key]['scale']) / 100;
+                    }
+                }
+
+                // convert number to word
+                $in_words = "";
+                // $fmt = numfmt_create("ID", NumberFormatter::SPELLOUT);
+                // $in_words = numfmt_format($fmt, round($final_score, 0));
+
+                $subjects[] = [
+                    'subject' => $subject->name,
+                    'final_score' => $final_score,
+                    'in_words' => $in_words,
+                    'description' => round($final_score, 0) >= 75 ? "Tuntas" : "Tidak Tuntas"
+                ];
+
+                $final_score = 0;
+                $score_by_scale = [];
+                $data_nilai = [];
+            }
+
+            $students[] = [
+                'class' => $singleData->name,
+                'name' => $singleData->students[0]->name,
+                'serial' => $singleData->students[0]->serial,
+                'attendance' => $singleData->students[0]->id,
+                'score' => $subjects
+            ];
+        }
+        // dd($students);
+
+        //return view('PDF.byClassBulk', ['data' => $students, 'guardian' => Teacher::where('id', ClassRoom::find($class_id)->guardian_id)->first()->name]);
+        $pdf = PDF::loadView('PDF.byClassBulk', ['data' => $students, 'guardian' => Teacher::where('id', ClassRoom::find($class_id)->guardian_id)->first()->name])->setPaper('a3', 'portrait');
+
+        return $pdf->download('Nilai_Siswa_' . ucfirst($students[0]['class']) . '.pdf');
     }
 }
