@@ -10,7 +10,7 @@
 	}
 </style>
 <body>
-  <h1 class="text-center custom-header">SMA 1 ZIMBABWE</h1>
+  <h1 class="text-center custom-header">{{ $schoolInfo['name'] }}</h1>
   <div class="row">
     <div class="col-md-6">
       <h6>Nama Siswa: {{ $data['name'] }}</h6>
@@ -50,7 +50,7 @@
         <tr>
           <td>{{ ++$key }}</td>
           <td>{{ $item['subject'] }}</td>
-          <td>75</td>
+          <td>{{ $item['passingPoint'] }}</td>
           <td>{{ round($item['final_score'], 0) }}</td>
           <td>{{ $item['in_words'] }}</td>
           <td>{{ $item['description'] }}</td>

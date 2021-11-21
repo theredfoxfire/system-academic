@@ -6,6 +6,8 @@ use App\ClassRoom;
 use App\Teacher;
 use App\Student;
 use App\Subject;
+use App\SchoolInfo;
+use App\AcademicYear;
 use PDF;
 
 class PDFController extends Controller
@@ -118,8 +120,37 @@ class PDFController extends Controller
         }
     }
 
+    function penyebut($nilai) {
+		$nilai = abs($nilai);
+		$huruf = array("", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas");
+		$temp = "";
+		if ($nilai < 12) {
+			$temp = " ". $huruf[$nilai];
+		} else if ($nilai <20) {
+			$temp = $this->penyebut($nilai - 10). " belas";
+		} else if ($nilai < 100) {
+			$temp = $this->penyebut($nilai/10)." puluh". $this->penyebut($nilai % 10);
+		} else if ($nilai < 200) {
+			$temp = " seratus" . $this->penyebut($nilai - 100);
+		} else if ($nilai < 1000) {
+			$temp = $this->penyebut($nilai/100) . " ratus" . $this->penyebut($nilai % 100);
+		} else if ($nilai < 2000) {
+			$temp = " seribu" . penyebut($nilai - 1000);
+		} else if ($nilai < 1000000) {
+			$temp = $this->penyebut($nilai/1000) . " ribu" . $this->penyebut($nilai % 1000);
+		} else if ($nilai < 1000000000) {
+			$temp = $this->penyebut($nilai/1000000) . " juta" . $this->penyebut($nilai % 1000000);
+		} else if ($nilai < 1000000000000) {
+			$temp = $this->penyebut($nilai/1000000000) . " milyar" . $this->penyebut(fmod($nilai,1000000000));
+		} else if ($nilai < 1000000000000000) {
+			$temp = $this->penyebut($nilai/1000000000000) . " trilyun" . $this->penyebut(fmod($nilai,1000000000000));
+		}     
+		return $temp;
+	}
+
     function byStudent($student_id)
     {
+        $lastAcademicYear = AcademicYear::max('id');
         $data = ClassRoom::whereHas('students', function ($query) use ($student_id) {
             $query->where('student.id', $student_id);
         })->with([
@@ -127,15 +158,19 @@ class PDFController extends Controller
             'students' => function ($query) use ($student_id) {
                 $query->where('student.id', $student_id);
             },
-            'subjects.exams' => function ($query) {
+            'classSubjects.academicYear' => function ($query) use ($lastAcademicYear) {
+                $query->where('academic_year.id', $lastAcademicYear);
+            },
+            'classSubjects.exams' => function ($query) {
                 $query->orderBy('exam.id', 'ASC');
             },
-            'subjects.exams.examType',
-            'subjects.exams.examPoints' => function ($query) use ($student_id) {
+            'classSubjects.exams.examType',
+            'classSubjects.exams.examPoints' => function ($query) use ($student_id) {
                 $query->where('exam_point.student_id', $student_id);
                 $query->orderBy('exam_point.id', 'ASC');
             }
         ])->first();
+        $schoolInfo = SchoolInfo::first();
 
         // check existing guardian
         if (!empty($data->guardian_id)) {
@@ -144,23 +179,26 @@ class PDFController extends Controller
             $guardian = '';
         }
 
-        $TH = 0;
-        $UH = 0;
-        $UTS = 0;
-        $UAS = 0;
-        $THCount = 0;
-        $UHCount = 0;
-        $UTSCount = 0;
-        $UASCount = 0;
-        $THScale = 0;
-        $THScale = 0;
-        $UTSScale = 0;
-        $UASScale = 0;
+        
         $subjects = [];
-        $data_nilai = [];
-        $score_by_scale = [];
-        $final_score = 0;
-        foreach ($data->subjects as $key => $subject) {
+        
+        foreach ($data->classSubjects as $key => $subject) {
+            $final_score = 0;
+            $score_by_scale = [];
+            $data_nilai = [];
+            $TH = 0;
+            $UH = 0;
+            $UTS = 0;
+            $UAS = 0;
+            $THCount = 0;
+            $UHCount = 0;
+            $UTSCount = 0;
+            $UASCount = 0;
+            $THScale = 0;
+            $THScale = 0;
+            $UTSScale = 0;
+            $UASScale = 0;
+            $passingPoint = $subject->passing_point ?? 0;
             foreach ($subject->exams as $exam) {
                 if (!empty($exam->examPoints)) {
                     foreach ($exam->examPoints as $examPoint) {
@@ -201,21 +239,17 @@ class PDFController extends Controller
             ];
             $final_score = $array_nilai['TH'] + $array_nilai['UH'] + $array_nilai['UTS'] + $array_nilai['UAS'];
 
-            // convert number to word
             $in_words = "";
-            // $fmt = numfmt_create("ID", NumberFormatter::SPELLOUT);
-            // $in_words = numfmt_format($fmt, round($final_score, 0));
-
+            $in_words = $this->penyebut(round($final_score, 0));
+            $passingText = round($final_score, 0) >= $passingPoint ? "Tuntas" : "Tidak Tuntas";
+            $desc = $final_score > 0 ? $passingText : '-' ;
             $subjects[] = [
-                'subject' => $subject->name,
+                'subject' => $subject->subject->name,
                 'final_score' => $final_score,
-                'in_words' => $in_words,
-                'description' => round($final_score, 0) >= 75 ? "Tuntas" : "Tidak Tuntas"
+                'passingPoint' => $passingPoint,
+                'in_words' => $final_score > 0 ? $in_words : "-",
+                'description' => $desc,
             ];
-
-            $final_score = 0;
-            $score_by_scale = [];
-            $data_nilai = [];
         }
 
         $student = [
@@ -228,7 +262,7 @@ class PDFController extends Controller
         //dd($student);
 
         //return view('PDF.byStudent', ['data' => $student, 'guardian' => $guardian, 'subject' => $student['score'][0]['subject']]);
-        $pdf = PDF::loadView('PDF.byStudent', ['data' => $student, 'guardian' => $guardian, 'subject' => $student['score'][0]['subject']])->setPaper('a3', 'portrait');
+        $pdf = PDF::loadView('PDF.byStudent', ['data' => $student,'schoolInfo' => $schoolInfo, 'guardian' => $guardian, 'subject' => $student['score'][0]['subject']])->setPaper('a3', 'portrait');
 
         return $pdf->download($student['name'] . '_' . ucfirst($student['class']) . '.pdf');
     }

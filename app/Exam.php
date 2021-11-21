@@ -13,6 +13,11 @@ class Exam extends Model
     {
         return $this->belongsTo(ExamType::class);
     }
+    
+    function classSubject()
+    {
+        return $this->belongsTo(TeacherClassToSubject::class, 'teacher_subject_id');
+    }
 
     function subjects()
     {

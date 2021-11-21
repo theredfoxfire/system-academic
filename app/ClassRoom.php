@@ -13,6 +13,10 @@ class ClassRoom extends Model
     {
         return $this->hasMany(Student::class);
     }
+    function classSubjects()
+    {
+        return $this->hasMany(TeacherClassToSubject::class, 'class_room_id');
+    }
 
     function subjects()
     {
