@@ -20,75 +20,39 @@
 		</div>
 	</div>
 	<table class='table table-bordered'>
-		<col>
-		<colgroup span="2"></colgroup>
-		<colgroup span="2"></colgroup>
 		<thead>
 		<tr>
-			<th rowspan="2">No</th>
-			<th rowspan="2" style="width: 10%">Serial</th>
-			<th rowspan="2" style="width: 25%">Nama</th>
-			{{-- <th rowspan="2">L/P</th> --}}
-			<th colspan="4" scope="colgroup">Nilai Tugas</th>
-			<th rowspan="2">RNT</th>
-			<th colspan="4" scope="colgroup">Nilai UH</th>
-			<th rowspan="2">RNUH</th>
-			<th rowspan="2">NA</th>
-		</tr>
-		<tr>
-			<th scope="col">1</th>
-			<th scope="col">2</th>
-			<th scope="col">3</th>
-			<th scope="col">4</th>
-			<th scope="col">1</th>
-			<th scope="col">2</th>
-			<th scope="col">3</th>
-			<th scope="col">4</th>
+			<th >No</th>
+			<th style="width: 25%">Nama</th>
+				@foreach ($data['examType'] as $type)
+						<th>{{ trimSubjectName($type['name']) }}</th>
+				@endforeach
 		</tr>
 		</thead>
 	<tbody>
-		@php
-				$totalNA = 0;
-				$totalCount = 0;
-		@endphp
 		@foreach ($data['subjects'] as $key => $subject)
 		<tr>
 				<td>{{ ++$key }}</td>
-				<td>{{ $subject['serial'] }}</td>
 				<td>{{ $subject['name'] }}</td>
-				{{-- <td>L</td> --}}
-				{{-- Tugas Harian --}}
-				@foreach ($subject['exams']['TH'] as $TH)
-					<td>{{ $TH['point'] }}</td>
-					@php
-							$totalNA += $TH['point'];
-							$totalCount += 1;
-					@endphp
+				@foreach ($data['examType'] as $type)
+						<td style="padding: 0px;margin: 0px;">
+							
+								@if(count($subject['exams']) > 0)
+									<table>
+										<tr>
+									@foreach ($subject['exams'][$type['id'].$subject['serial']] as $key => $point)
+										<td>{{ $point['point'] }}</td>
+									@endforeach
+										</tr>
+									</table>
+								@else
+									-
+								@endif
+								
+						</td>
 				@endforeach
-				@for($i = 0 ;$i < (4-count($subject['exams']['TH'])); $i++)
-					<td></td>
-				@endfor
-				<td>{{ $subject['exams']['averageTH'] }}</td>
-
-				{{-- Ulangan Harian --}}
-				@foreach ($subject['exams']['UH'] as $UH)
-					<td>{{ $UH['point'] }}</td>
-					@php
-							$totalNA += $UH['point'];
-							$totalCount += 1;
-					@endphp
-				@endforeach
-				@for($i = 0 ;$i < (4-count($subject['exams']['UH'])); $i++)
-					<td></td>
-				@endfor
-				<td>{{ $subject['exams']['averageUH'] }}</td>
-				<td>{{ $subject['exams']['NA'] }}</td>
 		</tr>
 		@endforeach
-		<tr>
-			<td colspan="13">Rata Rata Nilai Kelas</td>
-			<td>{{ round(($totalNA/$totalCount), 0) }}</td>
-		</tr>
 	</tbody>
 	</table>
 </body>

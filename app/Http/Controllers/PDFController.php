@@ -121,6 +121,15 @@ class PDFController extends Controller
         }
     }
 
+    function trimSubjectName($subject) {
+        $arrSubjectString = explode(" ", $subject);
+        $trimedSubjectName = "";
+        foreach($arrSubjectString as $itemString) {
+            $trimedSubjectName = $trimedSubjectName.ucfirst($itemString[0]);
+        }
+        return $trimedSubjectName;
+    }
+
     function penyebut($nilai) {
 		$nilai = abs($nilai);
 		$huruf = array("", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas");
@@ -252,75 +261,64 @@ class PDFController extends Controller
 
     function byStudentAllSubject($student_id)
     {
+        $examType = ExamType::where('is_deleted', '!=', 1)->orWhereNull('is_deleted')->get();
         $data = ClassRoom::whereHas('students', function ($query) use ($student_id) {
             $query->where('student.id', $student_id);
         })->with([
             'students' => function ($query) use ($student_id) {
                 $query->where('student.id', $student_id);
             },
-            'subjects.exams' => function ($query) {
+            'classSubjects.exams' => function ($query) {
                 $query->orderBy('exam.id', 'ASC');
             },
-            'subjects.exams.examType',
-            'subjects.exams.examPoints' => function ($query) use ($student_id) {
+            'classSubjects.exams.examType',
+            'classSubjects.exams.examPoints' => function ($query) use ($student_id) {
                 $query->where('exam_point.student_id', $student_id);
             },
         ])->first();
         //dd($data->subjects[0]->exams);
-
-        $student = [];
-        $subjects = [];
         $exams = [];
-        $TH = [];
-        $UH = [];
-        $totalTH = 0;
-        $totalUH = 0;
+        $pointItemList = [];
+        $pointCounterList = [];
+        $pointScaleList = [];
 
-        if (!empty($data->subjects)) {
-            foreach ($data->subjects as $subject) {
+        if (!empty($data->classSubjects)) {
+            foreach ($data->classSubjects as $subject) {
+                $data_nilai = [];
                 foreach ($subject->exams as $exam) {
-                    if (!empty($exam->examPoints[0])) {
-                        if ($exam->examType->name == 'Tugas Harian') {
-                            $TH[] = [
-                                'type' => $exam->examType->name,
-                                'point' => $exam->examPoints[0]->point
+                    if (!empty($exam->examPoints)) {
+                        foreach ($exam->examPoints as $examPoint) {
+                            $existing = !empty($data_nilai[$exam->examType->id.$subject->subject->serial]) ? $data_nilai[$exam->examType->id.$subject->subject->serial] : [];
+                            $item = [
+                                'point' => $examPoint->point,
+                                'scale' => $exam->examType->scale,
+                                'type' => $exam->examType->id,
+                                'name' => $this->trimSubjectName($exam->examType->name),
+                                'subjectName' => $subject->subject->name,
+                                'subjectSerial' => $subject->subject->serial,
                             ];
-                            $totalTH += $exam->examPoints[0]->point;
-                        } elseif ($exam->examType->name == 'Ulangan Harian') {
-                            $UH[] = [
-                                'type' => $exam->examType->name,
-                                'point' => $exam->examPoints[0]->point
-                            ];
-                            $totalUH += $exam->examPoints[0]->point;
+                            if (count($existing) > 0) {
+                              array_push($existing, $item);
+                              $data_nilai[$exam->examType->id.$subject->subject->serial] = $existing;
+                            } else {
+                              $data_nilai[$exam->examType->id.$subject->subject->serial] = [$item];
+                            }
                         }
                     }
                 }
-                $exams = [
-                    'TH' => $TH,
-                    'UH' => $UH,
-                    'NA' => round((($totalTH / count($TH) + $totalUH / count($UH)) / 2), 0),
-                    'averageTH' => round($totalTH / count($TH), 0),
-                    'averageUH' => round($totalUH / count($UH), 0)
-                ];
-
                 $subjects[] = [
-                    'name' => $subject->name,
-                    'serial' => $subject->serial,
-                    'exams' => $exams
+                    'name' => $subject->subject->name,
+                    'serial' => $subject->subject->serial,
+                    'exams' => $data_nilai,
                 ];
-
-                $TH = [];
-                $UH = [];
-                $totalTH = 0;
-                $totalUH = 0;
             }
             $student = [
                 'class' => $data->name,
                 'name' => $data->students[0]->name,
-                'subjects' => $subjects
+                'subjects' => $subjects,
+                'examType' => $examType,
             ];
-            //dd($student);
-
+            // dd($student);
             //return view('PDF.byStudentAllSubject', ['data' => $student]);
 
             $pdf = PDF::loadView('PDF.byStudentAllSubject', ['data' => $student])->setPaper('a3', 'landscape');
