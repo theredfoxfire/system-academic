@@ -8,6 +8,7 @@ use App\Student;
 use App\Subject;
 use App\SchoolInfo;
 use App\AcademicYear;
+use App\ExamType;
 use PDF;
 
 class PDFController extends Controller
@@ -148,9 +149,10 @@ class PDFController extends Controller
 		return $temp;
 	}
 
-    function byStudent($student_id)
+    function byStudent($student_id, $academic_year)
     {
-        $lastAcademicYear = AcademicYear::max('id');
+        $lastAcademicYear = $academic_year == 0 ? AcademicYear::max('id') : $academic_year;
+        $examType = ExamType::where('is_deleted', '!=', 1)->orWhereNull('is_deleted')->get();
         $data = ClassRoom::whereHas('students', function ($query) use ($student_id) {
             $query->where('student.id', $student_id);
         })->with([
@@ -186,18 +188,9 @@ class PDFController extends Controller
             $final_score = 0;
             $score_by_scale = [];
             $data_nilai = [];
-            $TH = 0;
-            $UH = 0;
-            $UTS = 0;
-            $UAS = 0;
-            $THCount = 0;
-            $UHCount = 0;
-            $UTSCount = 0;
-            $UASCount = 0;
-            $THScale = 0;
-            $THScale = 0;
-            $UTSScale = 0;
-            $UASScale = 0;
+            $pointItemList = [];
+            $pointCounterList = [];
+            $pointScaleList = [];
             $passingPoint = $subject->passing_point ?? 0;
             foreach ($subject->exams as $exam) {
                 if (!empty($exam->examPoints)) {
@@ -205,39 +198,29 @@ class PDFController extends Controller
                         $data_nilai[] = [
                             'point' => $examPoint->point,
                             'scale' => $exam->examType->scale,
-                            'type' => $exam->examType->name,
+                            'type' => $exam->examType->id,
                         ];
                     }
                 }
             }
 
             foreach ($data_nilai as $nilai) {
-                if ($nilai['type'] == 'Tugas Harian') {
-                    $TH += $nilai['point'];
-                    $THCount += 1;
-                    $THScale = $nilai['scale'];
-                } else if ($nilai['type'] == 'Ulangan Harian') {
-                    $UH += $nilai['point'];
-                    $UHCount += 1;
-                    $UHScale = $nilai['scale'];
-                } else if ($nilai['type'] == 'Ujian Tengah Semester') {
-                    $UTS += $nilai['point'];
-                    $UTSCount += 1;
-                    $UTSScale = $nilai['scale'];
-                } else if ($nilai['type'] == 'Ujian Ahir Semester') {
-                    $UAS += $nilai['point'];
-                    $UASCount += 1;
-                    $UASScale = $nilai['scale'];
-                }
+                if (!empty($pointItem[$nilai['type']])) {
+                    $pointItemList[$nilai['type']] = $pointItemList[$nilai['type']] + $nilai['point'];
+                    $pointCounterList[$nilai['type']] = $pointCounterList[$nilai['type']] + 1;
+                    $pointScaleList[$nilai['type']] = $nilai['scale'];
+                } else {
+                    $pointItemList[$nilai['type']] = $nilai['point'];
+                    $pointCounterList[$nilai['type']] = 1;
+                    $pointScaleList[$nilai['type']] = $nilai['scale'];  
+                } 
             }
 
-            $array_nilai = [
-                'TH' => $TH != 0 ? (($TH / $THCount) * $THScale) / 100 : 0,
-                'UH' => $UH != 0 ? (($UH / $UHCount) * $UHScale) / 100 : 0,
-                'UTS' => $UTS != 0 ? (($UTS / $UTSCount) * $UTSScale) / 100 : 0,
-                'UAS' => $UAS != 0 ? (($UAS / $UASCount) * $UASScale) / 100 : 0,
-            ];
-            $final_score = $array_nilai['TH'] + $array_nilai['UH'] + $array_nilai['UTS'] + $array_nilai['UAS'];
+            $final_score = 0;
+            foreach ($pointItemList as $index => $pointItem) {
+                $calculateScore = $pointItem != 0 ? (($pointItem / $pointCounterList[$index]) * $pointScaleList[$index]) / 100 : 0;
+                $final_score = $final_score + $calculateScore;
+            }
 
             $in_words = "";
             $in_words = $this->penyebut(round($final_score, 0));

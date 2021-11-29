@@ -16,6 +16,6 @@ Route::get('/', function () {
 });
 
 Route::get('/PDF/byClass/{class_id}/{subject_id}/{academic_year_id}', 'PDFController@byClass');
-Route::get('/PDF/byStudent/{student_id}', 'PDFController@byStudent');
+Route::get('/PDF/byStudent/{student_id}/{academic_year}', 'PDFController@byStudent');
 Route::get('/PDF/byClassBulk/{class_id}', 'PDFController@byClassBulk');
 Route::get('/PDF/byStudentAllSubject/{student_id}', 'PDFController@byStudentAllSubject');
